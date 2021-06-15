@@ -2,6 +2,7 @@
 This file contains code that is adapted from
 https://github.com/thomasjpfan/pytorch_refinenet/blob/master/pytorch_refinenet/refinenet/refinenet_4cascade.py
 """
+from sine_output import SineOutput
 import torch
 import torch.nn as nn
 
@@ -14,7 +15,7 @@ class MidasNet_small(BaseModel):
     """
 
     def __init__(self, path=None, features=64, backbone="efficientnet_lite3", non_negative=True, exportable=True, channels_last=False, align_corners=True,
-        blocks={'expand': True}):
+        blocks={'expand': True}, use_sine=False):
         """Init.
 
         Args:
@@ -55,19 +56,25 @@ class MidasNet_small(BaseModel):
         self.scratch.refinenet2 = FeatureFusionBlock_custom(features2, self.scratch.activation, deconv=False, bn=False, expand=self.expand, align_corners=align_corners)
         self.scratch.refinenet1 = FeatureFusionBlock_custom(features1, self.scratch.activation, deconv=False, bn=False, align_corners=align_corners)
 
-        
-        self.scratch.output_conv = nn.Sequential(
-            nn.Conv2d(features, features//2, kernel_size=3, stride=1, padding=1, groups=self.groups),
-            Interpolate(scale_factor=2, mode="bilinear"),
-            nn.Conv2d(features//2, 32, kernel_size=3, stride=1, padding=1),
-            self.scratch.activation,
-            nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(True) if non_negative else nn.Identity(),
-            nn.Identity(),
-        )
-        
-        if path:
-            self.load(path)
+        if use_sine == False:
+            self.scratch.output_conv = nn.Sequential(
+                nn.Conv2d(features, features//2, kernel_size=3, stride=1, padding=1, groups=self.groups),
+                Interpolate(scale_factor=2, mode="bilinear"),
+                nn.Conv2d(features//2, 32, kernel_size=3, stride=1, padding=1),
+                self.scratch.activation,
+                nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
+                nn.ReLU(True) if non_negative else nn.Identity(),
+                nn.Identity(),
+            )
+        else:
+            self.scratch.output_conv = nn.Sequential(
+                nn.Conv2d(features, features//2, kernel_size=3, stride=1, padding=1, groups=self.groups),
+                Interpolate(scale_factor=2, mode="bilinear"),
+                nn.Conv2d(features//2, 32, kernel_size=3, stride=1, padding=1),
+                SineOutput(32),
+                nn.ReLU(True) if non_negative else nn.Identity(),
+                nn.Identity(),
+            )
 
 
     def forward(self, x):
@@ -102,7 +109,7 @@ class MidasNet_small(BaseModel):
         
         out = self.scratch.output_conv(path_1)
 
-        return torch.squeeze(out, dim=1)
+        return out
 
 
 
